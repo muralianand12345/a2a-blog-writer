@@ -20,6 +20,7 @@ class BlogWriterAgent:
         logger.info(f"Starting blog writing process for topic: {topic}")
 
         # Step 1: Research the topic
+        logger.info("Step 1/3: Researching topic...")
         research_result = await self.topic_researcher.process(topic)
         if not research_result["success"]:
             return {
@@ -28,6 +29,7 @@ class BlogWriterAgent:
             }
 
         # Step 2: Generate an outline
+        logger.info("Step 2/3: Generating outline...")
         outline_result = await self.outline_generator.process(
             research_result["content"]
         )
@@ -38,6 +40,7 @@ class BlogWriterAgent:
             }
 
         # Step 3: Write the content
+        logger.info("Step 3/3: Writing content...")
         content_result = await self.content_writer.process(outline_result["content"])
 
         # Return the final result

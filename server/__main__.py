@@ -32,22 +32,35 @@ class BlogWriterAgentExecutor(BaseAgentExecutor):
         logger.info("BlogWriterAgentExecutor initialized")
 
     async def on_message_send(
-        self,
-        request: SendMessageRequest,
-        event_queue: EventQueue,
-        task: Task | None,
+        self, request: SendMessageRequest, event_queue: EventQueue, task: Task | None
     ) -> None:
         """Handler for 'message/send' requests."""
         try:
+            ack_message = Message(
+                role=Role.agent,
+                parts=[
+                    Part(
+                        TextPart(
+                            text="Your blog post is being generated. This may take a minute..."
+                        )
+                    )
+                ],
+                messageId=str(uuid4()),
+                final=False,
+            )
+            event_queue.enqueue_event(ack_message)
+
             topic = extract_text_from_parts(
                 [part.root.model_dump() for part in request.params.message.parts]
             )
+
             result = await self.agent.invoke(topic)
 
             message = Message(
                 role=Role.agent,
                 parts=[Part(TextPart(text=result["content"]))],
                 messageId=str(uuid4()),
+                final=True,
             )
             event_queue.enqueue_event(message)
             logger.info("Blog writing completed and response sent")
@@ -57,6 +70,7 @@ class BlogWriterAgentExecutor(BaseAgentExecutor):
                 role=Role.agent,
                 parts=[Part(TextPart(text=f"Error writing blog: {str(e)}"))],
                 messageId=str(uuid4()),
+                final=True,
             )
             event_queue.enqueue_event(message)
 

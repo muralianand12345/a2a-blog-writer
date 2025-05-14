@@ -35,7 +35,7 @@ requires-dist = [
 ]
 
 [[package]]
-name = "a2ae"
+name = "a2a-blog-writer"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

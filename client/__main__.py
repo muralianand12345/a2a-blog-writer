@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 import httpx
 import asyncio
@@ -26,7 +27,7 @@ from constants import (
 
 async def get_a2a_client():
     """Get a new A2A client."""
-    http_client = httpx.AsyncClient()
+    http_client = httpx.AsyncClient(timeout=120.0)
     client = await A2AClient.get_client_from_agent_card_url(http_client, SERVER_URL)
     logger.info(f"Successfully connected to server at {SERVER_URL}")
     return client, http_client
@@ -60,11 +61,11 @@ async def non_stream_blog_request(client: A2AClient, payload: Dict[str, Any]) ->
     """Send a non-streaming blog writing request."""
     logger.info("Sending non-streaming blog request")
     try:
+        logger.info("Waiting for server response (this may take a minute or two)...")
         response: SendMessageResponse = await client.send_message(payload=payload)
 
         if isinstance(response.root, SendMessageSuccessResponse):
             if hasattr(response.root.result, "parts") and response.root.result.parts:
-                # Extract text from message parts
                 content = ""
                 for part in response.root.result.parts:
                     if hasattr(part.root, "text"):
@@ -77,6 +78,9 @@ async def non_stream_blog_request(client: A2AClient, payload: Dict[str, Any]) ->
             error_message = getattr(response.root.error, "message", "Unknown error")
             logger.error(f"Error in blog request: {error_message}")
             return f"Error: {error_message}"
+    except httpx.TimeoutError:
+        logger.error("Request timed out. The server is taking too long to respond.")
+        return "Error: Request timed out. Please try using streaming mode for long blog posts."
     except Exception as e:
         logger.error(f"Error in non-streaming blog request: {str(e)}")
         return f"Error: {str(e)}"
@@ -146,6 +150,28 @@ def save_blog_post(content: str, filename: str = None) -> str:
         return None
 
 
+async def send_blog_request_with_retry(
+    topic: str, stream: bool = False, max_retries: int = 3
+) -> str:
+    """Send a blog writing request to the server with retries."""
+    retries = 0
+    while retries < max_retries:
+        try:
+            return await send_blog_request(topic, stream)
+        except Exception as e:
+            retries += 1
+            if retries >= max_retries:
+                logger.error(f"Failed after {max_retries} attempts: {str(e)}")
+                return (
+                    f"Error: Failed to get response after multiple attempts. {str(e)}"
+                )
+
+            wait_time = 2**retries
+            print(f"\nRequest failed. Retrying in {wait_time} seconds...")
+            logger.warning(f"Request failed, retry {retries}/{max_retries}: {str(e)}")
+            await asyncio.sleep(wait_time)
+
+
 async def main():
     """Main client application function."""
     print(WELCOME_MESSAGE)
@@ -166,14 +192,38 @@ async def main():
             # Ask if they want to see the streaming process
             streaming = input(STREAMING_PROMPT).strip().lower().startswith("y")
 
+            if len(topic.split()) > 5:
+                print(
+                    "\nThis seems like a complex topic. Streaming mode is recommended for better experience."
+                )
+                if not streaming:
+                    confirm = (
+                        input("Would you like to switch to streaming mode? (y/n)\n> ")
+                        .strip()
+                        .lower()
+                    )
+                    if confirm.startswith("y"):
+                        streaming = True
+
             # Send the request to the server
             try:
-                blog_content = await send_blog_request(topic, stream=streaming)
+                blog_content = await send_blog_request_with_retry(
+                    topic=topic, stream=streaming, max_retries=5
+                )
 
                 if not streaming:
-                    print("\n--- Blog Post ---\n")
-                    print(blog_content)
-                    print("\n--- End of Blog Post ---\n")
+                    print(
+                        "\nGenerating your blog post. This may take a minute or two...\n"
+                    )
+                    animation = "|/-\\"
+                    idx = 0
+                    start_time = time.time()
+                    while time.time() - start_time < 120:
+                        print(
+                            f"\rProcessing... {animation[idx % len(animation)]}", end=""
+                        )
+                        idx += 1
+                        await asyncio.sleep(0.1)
 
                 # Ask if they want to save the blog post
                 save_blog = input(SAVE_PROMPT).strip().lower().startswith("y")

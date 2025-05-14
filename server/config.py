@@ -10,7 +10,7 @@ if not OPENAI_API_KEY:
 HOST = os.getenv("HOST", "localhost")
 PORT = int(os.getenv("PORT", "8000"))
 
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4-turbo")
+MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
 TEMPERATURE = float(os.getenv("TEMPERATURE", "0.7"))
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
