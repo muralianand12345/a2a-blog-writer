@@ -1,0 +1,9 @@
+BLOG_FILE_EXTENSION = ".md"
+
+DEFAULT_FILENAME = "blog_post"
+
+BLOG_OUTPUT_DIR = "blog_posts"
+
+MAX_RETRIES = 3
+
+RETRY_DELAY = 2

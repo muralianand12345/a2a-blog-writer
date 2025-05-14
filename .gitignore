@@ -1,0 +1,6 @@
+.env
+blog_posts
+test
+logs
+.venv
+__pycache__
