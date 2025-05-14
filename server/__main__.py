@@ -16,6 +16,8 @@ from a2a.types import (
     SendStreamingMessageRequest,
     Task,
     TextPart,
+    TaskStatus,
+    TaskState,
 )
 
 from agents import BlogWriterAgent
@@ -36,6 +38,14 @@ class BlogWriterAgentExecutor(BaseAgentExecutor):
     ) -> None:
         """Handler for 'message/send' requests."""
         try:
+            if task is None:
+                task = Task(
+                    id=str(uuid4()),
+                    contextId=str(uuid4()),
+                    status=TaskStatus(state=TaskState.working),
+                    history=[],
+                )
+
             ack_message = Message(
                 role=Role.agent,
                 parts=[
@@ -48,6 +58,11 @@ class BlogWriterAgentExecutor(BaseAgentExecutor):
                 messageId=str(uuid4()),
                 final=False,
             )
+
+            if task.history is None:
+                task.history = []
+
+            task.history.append(ack_message)
             event_queue.enqueue_event(ack_message)
 
             topic = extract_text_from_parts(
@@ -56,23 +71,28 @@ class BlogWriterAgentExecutor(BaseAgentExecutor):
 
             result = await self.agent.invoke(topic)
 
-            message = Message(
+            final_message = Message(
                 role=Role.agent,
                 parts=[Part(TextPart(text=result["content"]))],
                 messageId=str(uuid4()),
                 final=True,
             )
-            event_queue.enqueue_event(message)
+
+            task.history.append(final_message)
+            task.status = TaskStatus(state=TaskState.completed)
+            event_queue.enqueue_event(task)
+            event_queue.enqueue_event(final_message)
+
             logger.info("Blog writing completed and response sent")
         except Exception as e:
             logger.error(f"Error in blog writing: {str(e)}")
-            message = Message(
+            error_message = Message(
                 role=Role.agent,
                 parts=[Part(TextPart(text=f"Error writing blog: {str(e)}"))],
                 messageId=str(uuid4()),
                 final=True,
             )
-            event_queue.enqueue_event(message)
+            event_queue.enqueue_event(error_message)
 
     async def on_message_stream(
         self,
@@ -82,9 +102,28 @@ class BlogWriterAgentExecutor(BaseAgentExecutor):
     ) -> None:
         """Handler for 'message/stream' requests."""
         try:
+            if task is None:
+                task = Task(
+                    id=str(uuid4()),
+                    contextId=str(uuid4()),
+                    status=TaskStatus(state=TaskState.working),
+                    history=[],
+                )
+                event_queue.enqueue_event(task)
+
             topic = extract_text_from_parts(
                 [part.root.model_dump() for part in request.params.message.parts]
             )
+
+            start_message = Message(
+                role=Role.agent,
+                parts=[Part(TextPart(text="Starting blog generation...\n"))],
+                messageId=str(uuid4()),
+                final=False,
+            )
+            event_queue.enqueue_event(start_message)
+
+            full_content = "Starting blog generation...\n"
 
             async for chunk in self.agent.stream(topic):
                 message = Message(
@@ -94,6 +133,24 @@ class BlogWriterAgentExecutor(BaseAgentExecutor):
                     final=chunk["done"],
                 )
                 event_queue.enqueue_event(message)
+
+                if chunk["done"] and "content" in chunk and len(chunk["content"]) > 100:
+                    full_content = chunk["content"]
+
+                    if task.history is None:
+                        task.history = []
+
+                    final_task_message = Message(
+                        role=Role.agent,
+                        parts=[Part(TextPart(text=full_content))],
+                        messageId=str(uuid4()),
+                        final=True,
+                    )
+
+                    task.history.append(final_task_message)
+                    task.status = TaskStatus(state=TaskState.completed)
+
+                    event_queue.enqueue_event(task)
 
             logger.info("Blog writing streaming completed")
         except Exception as e:

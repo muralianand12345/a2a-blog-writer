@@ -65,6 +65,18 @@ async def non_stream_blog_request(client: A2AClient, payload: Dict[str, Any]) ->
         response: SendMessageResponse = await client.send_message(payload=payload)
 
         if isinstance(response.root, SendMessageSuccessResponse):
+            if (
+                hasattr(response.root.result, "history")
+                and response.root.result.history
+            ):
+                last_message = response.root.result.history[-1]
+                if hasattr(last_message, "parts") and last_message.parts:
+                    content = ""
+                    for part in last_message.parts:
+                        if hasattr(part.root, "text"):
+                            content += part.root.text
+                    return content
+
             if hasattr(response.root.result, "parts") and response.root.result.parts:
                 content = ""
                 for part in response.root.result.parts:
@@ -90,7 +102,6 @@ async def stream_blog_request(client: A2AClient, payload: Dict[str, Any]) -> str
     """Send a streaming blog writing request."""
     logger.info("Sending streaming blog request")
     full_content = ""
-    last_update = ""
 
     try:
         stream_response = client.send_message_streaming(payload=payload)
@@ -102,13 +113,17 @@ async def stream_blog_request(client: A2AClient, payload: Dict[str, Any]) -> str
                 for part in chunk.root.result.parts:
                     if hasattr(part.root, "text"):
                         content = part.root.text
-                        # Only print if there's new content to avoid duplicates
-                        if not content.startswith(last_update):
+
+                        if getattr(chunk.root.result, "final", False):
+                            full_content = content
+                        else:
                             print(content, end="", flush=True)
-                            last_update = content
-                        full_content = content  # For the final return value
 
         print("\n\n--- Blog post completed ---\n")
+
+        if full_content:
+            print(full_content)
+
         return full_content
     except Exception as e:
         logger.error(f"Error in streaming blog request: {str(e)}")

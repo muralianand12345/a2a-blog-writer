@@ -52,53 +52,53 @@ class BlogWriterAgent:
         logger.info(f"Starting streaming blog writing process for topic: {topic}")
 
         # Step 1: Research the topic (streaming)
-        yield {"content": "🔍 Researching topic...", "done": False}
+        yield {"content": "\n\n🔍 Researching topic...\n\n", "done": False}
         research_content = ""
 
         async for chunk in self.topic_researcher.stream_process(topic):
             if chunk["done"]:
                 research_content = research_content.strip()
-                yield {"content": "✅ Research completed", "done": False}
+                yield {"content": "\n\n✅ Research completed\n\n", "done": False}
                 break
 
             research_content += chunk["content"]
-            yield {"content": f"🔍 Researching: {chunk['content']}", "done": False}
+            yield {"content": chunk["content"], "done": False}
 
         if not research_content:
-            yield {"content": "❌ Research failed", "done": True}
+            yield {"content": "\n\n❌ Research failed\n\n", "done": True}
             return
 
         # Step 2: Generate an outline (streaming)
-        yield {"content": "📝 Generating outline...", "done": False}
+        yield {"content": "\n\n📝 Generating outline...\n\n", "done": False}
         outline_content = ""
 
         async for chunk in self.outline_generator.stream_process(research_content):
             if chunk["done"]:
                 outline_content = outline_content.strip()
-                yield {"content": "✅ Outline completed", "done": False}
+                yield {"content": "\n\n✅ Outline completed\n\n", "done": False}
                 break
 
             outline_content += chunk["content"]
-            yield {"content": f"📝 Outlining: {chunk['content']}", "done": False}
+            yield {"content": chunk['content'], "done": False}
 
         if not outline_content:
-            yield {"content": "❌ Outline generation failed", "done": True}
+            yield {"content": "\n\n❌ Outline generation failed\n\n", "done": True}
             return
 
         # Step 3: Write the content (streaming)
-        yield {"content": "✍️ Writing blog content...", "done": False}
+        yield {"content": "\n\n✍️ Writing blog content...\n\n", "done": False}
         blog_content = ""
 
         async for chunk in self.content_writer.stream_process(outline_content):
             if chunk["done"]:
-                yield {"content": "✅ Blog writing completed", "done": False}
+                yield {"content": "\n\n✅ Blog writing completed\n\n", "done": False}
                 break
 
             blog_content += chunk["content"]
-            yield {"content": f"✍️ Writing: {chunk['content']}", "done": False}
+            yield {"content": chunk["content"], "done": False}
 
         # Final result
         if blog_content:
-            yield {"content": blog_content, "done": True}
+            yield {"content": f"\n\n{blog_content}\n", "done": True}
         else:
-            yield {"content": "❌ Content writing failed", "done": True}
+            yield {"content": "\n\n❌ Content writing failed\n\n", "done": True}
